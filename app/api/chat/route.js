@@ -72,17 +72,6 @@ function isSimpleHowAreYou(text) {
   );
 }
 
-function splitIntoHumanBursts(text) {
-  const parts = text
-    .split(/\n+/)
-    .flatMap((line) => line.split(/(?<=[.!?])\s+/))
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 3);
-
-  return parts.length ? parts : [text.trim()];
-}
-
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -146,13 +135,13 @@ Rules you must follow in every reply:
 
     if (isSimpleGreeting(message)) {
       return NextResponse.json({
-        replyParts: [`${message.replace(/[.!? ]+$/g, "")} 👋`],
+        reply: message.replace(/[.!? ]+$/g, ""),
       });
     }
 
     if (isSimpleHowAreYou(message)) {
       return NextResponse.json({
-        replyParts: ["I am good. You?"],
+        reply: "I am good. You?",
       });
     }
 
@@ -218,9 +207,7 @@ Rules you must follow in every reply:
     }
 
     const cleaned = removeCannedEndingQuestion(humanizeReply(shapeReply(aiMessage)));
-    const replyParts = splitIntoHumanBursts(cleaned);
-
-    return NextResponse.json({ reply: cleaned, replyParts });
+    return NextResponse.json({ reply: cleaned || "ok" });
   } catch (error) {
     return NextResponse.json({ error: "Chat request failed." }, { status: 500 });
   }

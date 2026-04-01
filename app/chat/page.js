@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const MESSAGE_BURST_DELAY_MS = 280;
-
 export default function ChatPage() {
   const router = useRouter();
   const bottomRef = useRef(null);
@@ -13,8 +11,6 @@ export default function ChatPage() {
   const [cloneProfile, setCloneProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   useEffect(() => {
     const cloneId = localStorage.getItem("cloneId");
@@ -29,12 +25,7 @@ export default function ChatPage() {
       try {
         const parsedProfile = JSON.parse(rawCloneProfile);
         setCloneProfile(parsedProfile);
-        setMessages([
-          {
-            role: "assistant",
-            content: `Hey hey bruh — I'm ${parsedProfile.name}'s clone. Ask me anything.`,
-          },
-        ]);
+        setMessages([]);
       } catch {
         setCloneProfile(null);
       }
@@ -88,15 +79,11 @@ export default function ChatPage() {
         throw new Error(data?.error || "Failed to get AI response.");
       }
 
-      const replyParts =
-        Array.isArray(data?.replyParts) && data.replyParts.length
-          ? data.replyParts
-          : [data.reply].filter(Boolean);
-
-      for (const part of replyParts.slice(0, 3)) {
-        setMessages((prev) => [...prev, { role: "assistant", content: part }]);
-        await wait(MESSAGE_BURST_DELAY_MS);
-      }
+      const replyText =
+        typeof data?.reply === "string" && data.reply.trim()
+          ? data.reply.trim()
+          : "ok";
+      setMessages((prev) => [...prev, { role: "assistant", content: replyText }]);
     } catch (sendError) {
       const nextError = sendError.message || "Something went wrong.";
       setError(nextError);
