@@ -10,9 +10,6 @@ export default function HomePage() {
     personality: "",
     style: "",
     tone: "",
-    responseLength: "",
-    goals: "",
-    doNotUse: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -30,9 +27,7 @@ export default function HomePage() {
       !form.name.trim() ||
       !form.personality.trim() ||
       !form.style.trim() ||
-      !form.tone.trim() ||
-      !form.responseLength.trim() ||
-      !form.goals.trim()
+      !form.tone.trim()
     ) {
       setError("Please fill in all fields.");
       return;
@@ -61,9 +56,6 @@ export default function HomePage() {
           personality: data.personality,
           style: data.style,
           tone: data.tone,
-          responseLength: data.responseLength,
-          goals: data.goals,
-          doNotUse: data.doNotUse,
         }),
       );
       router.push("/chat");
@@ -83,7 +75,7 @@ export default function HomePage() {
           </p>
           <h1 className="text-2xl font-semibold text-stone-50">Create Your AI Clone</h1>
           <p className="text-sm text-stone-400">
-            Define exactly how your clone should talk and what it must avoid.
+            Define how your clone talks in 4 clear fields.
           </p>
         </div>
 
@@ -118,32 +110,6 @@ export default function HomePage() {
             value={form.tone}
             onChange={handleChange}
             placeholder="Tone (e.g. mature, respectful, confident)"
-            className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
-          />
-          <select
-            name="responseLength"
-            value={form.responseLength}
-            onChange={handleChange}
-            className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
-          >
-            <option value="">Response length</option>
-            <option value="short">Short (1-2 lines)</option>
-            <option value="medium">Medium (2-4 lines)</option>
-          </select>
-          <textarea
-            name="goals"
-            value={form.goals}
-            onChange={handleChange}
-            placeholder="How this clone should behave (point-to-point, ask useful follow-ups, be precise)"
-            rows={3}
-            className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
-          />
-          <textarea
-            name="doNotUse"
-            value={form.doNotUse}
-            onChange={handleChange}
-            placeholder="Words or styles to avoid (optional)"
-            rows={2}
             className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
           />
 

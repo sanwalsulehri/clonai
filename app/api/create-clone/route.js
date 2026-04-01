@@ -8,15 +8,14 @@ export async function POST(request) {
     const personality = body?.personality?.trim();
     const style = body?.style?.trim();
     const tone = body?.tone?.trim();
-    const responseLength = body?.responseLength?.trim();
-    const goals = body?.goals?.trim();
-    const doNotUse = body?.doNotUse?.trim() ?? "";
+    const goals = "Stay in character and answer point-to-point.";
+    const doNotUse = "";
+    const responseLength = "balanced";
 
-    if (!name || !personality || !style || !tone || !responseLength || !goals) {
+    if (!name || !personality || !style || !tone) {
       return NextResponse.json(
         {
-          error:
-            "name, personality, style, tone, responseLength, and goals are required.",
+          error: "name, personality, style, and tone are required.",
         },
         { status: 400 },
       );

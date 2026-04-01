@@ -4,7 +4,7 @@ import { findCloneById } from "@/lib/cloneStore";
 const HISTORY_LIMIT = 10;
 
 function capLength(text, responseLength) {
-  const charLimit = responseLength === "medium" ? 300 : 180;
+  const charLimit = responseLength === "short" ? 220 : 420;
   const clean = text.trim();
   if (clean.length <= charLimit) return clean;
   return `${clean.slice(0, charLimit).trimEnd()}...`;
@@ -15,6 +15,47 @@ function normalizeReply(text) {
     .trim()
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ");
+}
+
+function shapeReply(text) {
+  const normalized = normalizeReply(text);
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const compact = lines.join("\n");
+  return capLength(compact || normalized, "balanced");
+}
+
+function humanizeReply(text) {
+  return text
+    .replace(/^(Certainly|Sure|Of course|Absolutely|Great question)[,!.\s-]*/i, "")
+    .replace(/\bAs an AI\b/gi, "")
+    .replace(/\bI can assist you with that\b/gi, "I can help with that")
+    .trim();
+}
+
+function removeCannedEndingQuestion(text) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return text;
+
+  const lastLine = lines[lines.length - 1];
+  const looksLikeCannedQuestion =
+    /^(want|need)\b.+\?$/i.test(lastLine) ||
+    /^(do you want|would you like|should i)\b.+\?$/i.test(lastLine);
+
+  if (looksLikeCannedQuestion && lines.length > 1) {
+    lines.pop();
+    return lines.join("\n");
+  }
+
+  return text;
 }
 
 export async function POST(request) {
@@ -37,9 +78,7 @@ export async function POST(request) {
       fallbackClone?.name?.trim() &&
       fallbackClone?.personality?.trim() &&
       fallbackClone?.style?.trim() &&
-      fallbackClone?.tone?.trim() &&
-      fallbackClone?.responseLength?.trim() &&
-      fallbackClone?.goals?.trim();
+      fallbackClone?.tone?.trim();
 
     const clone = cloneFromMemory ?? (hasFallbackClone ? fallbackClone : null);
 
@@ -67,19 +106,18 @@ export async function POST(request) {
 Personality: ${clone.personality}
 Speaking Style: ${clone.style}
 Tone: ${clone.tone}
-Primary Goals: ${clone.goals}
-Avoid these words/styles: ${clone.doNotUse || "none"}
-Target Response Length: ${clone.responseLength}
 
 Rules you must follow in every reply:
 - Stay fully in character.
 - Be point-to-point and practical.
 - No fluff, no filler, no long intros.
 - Match the clone's natural language style exactly. If that style is rough or uses slang, keep it natural and authentic.
-- Respect "Avoid these words/styles" strictly.
-- Keep replies concise.
-- Answer in 1-3 short lines max.
-- Ask one short follow-up question only if needed for clarity.`;
+- Sound like a real human chat message, not a support bot.
+- Keep replies concise but complete.
+- Default format: 1-3 short lines in plain text.
+- Use numbered steps only when user explicitly asks for steps.
+- Do not use robotic phrases like "Certainly", "As an AI", or "I can assist you".
+- Do not add a trailing offer question like "Want me to...?" unless the user directly asks for options.`;
 
     const history = rawHistory
       .filter(
@@ -100,7 +138,8 @@ Rules you must follow in every reply:
       body: JSON.stringify({
         model: "openai/gpt-4.1-mini",
         // Keep token usage low for free/limited OpenRouter credits.
-        max_tokens: 220,
+        temperature: 0.7,
+        max_tokens: 320,
         messages: [
           { role: "system", content: prompt },
           ...history,
@@ -141,7 +180,7 @@ Rules you must follow in every reply:
       );
     }
 
-    const cleaned = capLength(normalizeReply(aiMessage), clone.responseLength);
+    const cleaned = removeCannedEndingQuestion(humanizeReply(shapeReply(aiMessage)));
 
     return NextResponse.json({ reply: cleaned });
   } catch (error) {
