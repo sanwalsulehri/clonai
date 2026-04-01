@@ -58,6 +58,31 @@ function removeCannedEndingQuestion(text) {
   return text;
 }
 
+function isSimpleGreeting(text) {
+  const normalized = text.toLowerCase().trim();
+  return /^(hi|hii|hiii|hey|heyy|heyyy|hello|yo|sup|wassup|salam|aslam|assalamualaikum)[!. ]*$/.test(
+    normalized,
+  );
+}
+
+function isSimpleHowAreYou(text) {
+  const normalized = text.toLowerCase().trim();
+  return /^(how are you|how r u|how are u|how's it going|hows it going|kese ho|kaise ho)[?.! ]*$/.test(
+    normalized,
+  );
+}
+
+function splitIntoHumanBursts(text) {
+  const parts = text
+    .split(/\n+/)
+    .flatMap((line) => line.split(/(?<=[.!?])\s+/))
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  return parts.length ? parts : [text.trim()];
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -118,6 +143,18 @@ Rules you must follow in every reply:
 - Use numbered steps only when user explicitly asks for steps.
 - Do not use robotic phrases like "Certainly", "As an AI", or "I can assist you".
 - Do not add a trailing offer question like "Want me to...?" unless the user directly asks for options.`;
+
+    if (isSimpleGreeting(message)) {
+      return NextResponse.json({
+        replyParts: [`${message.replace(/[.!? ]+$/g, "")} 👋`],
+      });
+    }
+
+    if (isSimpleHowAreYou(message)) {
+      return NextResponse.json({
+        replyParts: ["I am good. You?"],
+      });
+    }
 
     const history = rawHistory
       .filter(
@@ -181,8 +218,9 @@ Rules you must follow in every reply:
     }
 
     const cleaned = removeCannedEndingQuestion(humanizeReply(shapeReply(aiMessage)));
+    const replyParts = splitIntoHumanBursts(cleaned);
 
-    return NextResponse.json({ reply: cleaned });
+    return NextResponse.json({ reply: cleaned, replyParts });
   } catch (error) {
     return NextResponse.json({ error: "Chat request failed." }, { status: 500 });
   }
