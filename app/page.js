@@ -80,38 +80,62 @@ export default function HomePage() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <input
-            name="name"
-            type="text"
-            value={form.name}
-            onChange={handleChange}
-            placeholder="Name"
-            className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
-          />
-          <input
-            name="personality"
-            type="text"
-            value={form.personality}
-            onChange={handleChange}
-            placeholder="Personality"
-            className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
-          />
-          <input
-            name="style"
-            type="text"
-            value={form.style}
-            onChange={handleChange}
-            placeholder="Speaking style (e.g. natural, direct, calm)"
-            className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
-          />
-          <input
-            name="tone"
-            type="text"
-            value={form.tone}
-            onChange={handleChange}
-            placeholder="Tone (e.g. mature, respectful, confident)"
-            className="rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
-          />
+          <div className="space-y-1.5">
+            <label htmlFor="name" className="text-xs font-medium text-stone-300">
+              Clone Name
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              value={form.name}
+              onChange={handleChange}
+              placeholder="e.g. Sulehri"
+              className="w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="personality" className="text-xs font-medium text-stone-300">
+              Personality
+            </label>
+            <input
+              id="personality"
+              name="personality"
+              type="text"
+              value={form.personality}
+              onChange={handleChange}
+              placeholder="e.g. bold, playful, sharp"
+              className="w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="style" className="text-xs font-medium text-stone-300">
+              Speaking Style
+            </label>
+            <input
+              id="style"
+              name="style"
+              type="text"
+              value={form.style}
+              onChange={handleChange}
+              placeholder="e.g. natural, direct, short-texting"
+              className="w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="tone" className="text-xs font-medium text-stone-300">
+              Tone
+            </label>
+            <input
+              id="tone"
+              name="tone"
+              type="text"
+              value={form.tone}
+              onChange={handleChange}
+              placeholder="e.g. mature, confident, respectful"
+              className="w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
+            />
+          </div>
 
           {error ? <p className="text-sm text-rose-400">{error}</p> : null}
 
