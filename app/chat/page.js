@@ -58,10 +58,24 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
+      const history = messages
+        .filter(
+          (item) =>
+            (item.role === "user" || item.role === "assistant") &&
+            item.content?.trim(),
+        )
+        .slice(-10)
+        .map((item) => ({ role: item.role, content: item.content }));
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, cloneId, clone: cloneProfile }),
+        body: JSON.stringify({
+          message: trimmed,
+          cloneId,
+          clone: cloneProfile,
+          history,
+        }),
       });
 
       const data = await response.json();
