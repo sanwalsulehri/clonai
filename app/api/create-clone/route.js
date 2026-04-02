@@ -8,14 +8,15 @@ export async function POST(request) {
     const personality = body?.personality?.trim();
     const style = body?.style?.trim();
     const tone = body?.tone?.trim();
+    const humor = body?.humor?.trim();
     const goals = "Stay in character and answer point-to-point.";
     const doNotUse = "";
     const responseLength = "balanced";
 
-    if (!name || !personality || !style || !tone) {
+    if (!name || !personality || !style || !tone || !humor) {
       return NextResponse.json(
         {
-          error: "name, personality, style, and tone are required.",
+          error: "name, personality, style, tone, and humor are required.",
         },
         { status: 400 },
       );
@@ -26,6 +27,7 @@ export async function POST(request) {
       personality,
       style,
       tone,
+      humor,
       responseLength,
       goals,
       doNotUse,

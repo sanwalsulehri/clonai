@@ -10,6 +10,7 @@ export default function HomePage() {
     personality: "",
     style: "",
     tone: "",
+    humor: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -27,7 +28,8 @@ export default function HomePage() {
       !form.name.trim() ||
       !form.personality.trim() ||
       !form.style.trim() ||
-      !form.tone.trim()
+      !form.tone.trim() ||
+      !form.humor.trim()
     ) {
       setError("Please fill in all fields.");
       return;
@@ -56,6 +58,7 @@ export default function HomePage() {
           personality: data.personality,
           style: data.style,
           tone: data.tone,
+          humor: data.humor,
         }),
       );
       router.push("/chat");
@@ -75,7 +78,7 @@ export default function HomePage() {
           </p>
           <h1 className="text-2xl font-semibold text-stone-50">Create Your AI Clone</h1>
           <p className="text-sm text-stone-400">
-            Define how your clone talks in 4 clear fields.
+            Define how your clone talks in 5 clear fields.
           </p>
         </div>
 
@@ -133,6 +136,20 @@ export default function HomePage() {
               value={form.tone}
               onChange={handleChange}
               placeholder="e.g. mature, confident, respectful"
+              className="w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="humor" className="text-xs font-medium text-stone-300">
+              Humor
+            </label>
+            <input
+              id="humor"
+              name="humor"
+              type="text"
+              value={form.humor}
+              onChange={handleChange}
+              placeholder="e.g. dry wit, playful jokes, mostly serious, meme-y"
               className="w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
             />
           </div>
