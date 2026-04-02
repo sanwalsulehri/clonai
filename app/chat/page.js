@@ -60,6 +60,28 @@ function applyCloneReactionToLastUser(prev, cloneReactionFromApi) {
   );
 }
 
+function newMessageId() {
+  return crypto.randomUUID();
+}
+
+/** Match server/history: prefix so the model sees threaded reply context for this burst line. */
+function formatTurnLineForApi(msg) {
+  const line = String(msg?.content ?? "").trim();
+  const rt = msg?.replyTo;
+  if (rt && typeof rt.quote === "string" && rt.quote.trim()) {
+    const role = rt.role === "assistant" ? "assistant" : "user";
+    const q = rt.quote.trim().slice(0, 420);
+    return `[User is replying to this earlier ${role} message: "${q}"]\n${line}`;
+  }
+  return line;
+}
+
+function truncateReplyPreview(text, max = 100) {
+  const t = String(text ?? "").trim().replace(/\s+/g, " ");
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
 export default function ChatPage() {
   const router = useRouter();
   const bottomRef = useRef(null);
@@ -84,6 +106,8 @@ export default function ChatPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   /** Which message index has the reaction picker open (null = closed). */
   const [reactionPickerForIndex, setReactionPickerForIndex] = useState(null);
+  /** Reply-to target for the next sent message (WhatsApp-style thread). */
+  const [replyTarget, setReplyTarget] = useState(null);
 
   useEffect(() => {
     const cloneId = localStorage.getItem("cloneId");
@@ -198,6 +222,13 @@ export default function ChatPage() {
         if (typeof item.cloneReaction === "string" && item.cloneReaction.trim()) {
           entry.cloneReaction = item.cloneReaction.trim();
         }
+        const rq = item.replyTo?.quote;
+        if (typeof rq === "string" && rq.trim() && item.role === "user") {
+          entry.replyTo = {
+            role: item.replyTo.role === "assistant" ? "assistant" : "user",
+            quote: rq.trim().slice(0, 500),
+          };
+        }
         return entry;
       });
 
@@ -285,6 +316,7 @@ export default function ChatPage() {
       setMessages((prev) => [
         ...prev,
         {
+          id: newMessageId(),
           role: "assistant",
           content: replyText,
           createdAt: new Date().toISOString(),
@@ -341,7 +373,7 @@ export default function ChatPage() {
 
     const historyBase = all.slice(0, all.length - turn.length);
     const history = buildHistoryEntries(historyBase);
-    const turnMessages = turn.map((t) => t.content.trim());
+    const turnMessages = turn.map((t) => formatTurnLineForApi(t));
 
     requestInFlightRef.current = true;
     setLoading(true);
@@ -403,6 +435,7 @@ export default function ChatPage() {
       setMessages((prev) => [
         ...prev,
         {
+          id: newMessageId(),
           role: "assistant",
           content: replyText,
           createdAt: new Date().toISOString(),
@@ -463,11 +496,21 @@ export default function ChatPage() {
       reactionFollowUpDebounceRef.current = null;
     }
 
+    const pendingReply = replyTarget;
+    setReplyTarget(null);
+
     const nextUserMessage = {
+      id: newMessageId(),
       role: "user",
       content: trimmed,
       createdAt: new Date().toISOString(),
     };
+    if (pendingReply?.quote?.trim()) {
+      nextUserMessage.replyTo = {
+        role: pendingReply.role === "assistant" ? "assistant" : "user",
+        quote: pendingReply.quote.trim().slice(0, 500),
+      };
+    }
     setMessages((prev) => [...prev, nextUserMessage]);
     setMessage("");
     setError("");
@@ -511,6 +554,7 @@ export default function ChatPage() {
     setTypingVisible(false);
     setMessages([]);
     setReactionPickerForIndex(null);
+    setReplyTarget(null);
     setError("");
     inputRef.current?.focus();
   };
@@ -520,6 +564,18 @@ export default function ChatPage() {
     const parsed = new Date(isoTime);
     if (Number.isNaN(parsed.getTime())) return "";
     return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const startReplyTo = (item) => {
+    const q = String(item.content ?? "").trim();
+    if (!q) return;
+    setReactionPickerForIndex(null);
+    setShowEmojiPicker(false);
+    setReplyTarget({
+      role: item.role === "assistant" ? "assistant" : "user",
+      quote: q.slice(0, 500),
+    });
+    inputRef.current?.focus();
   };
 
   const setMessageReaction = (index, emoji) => {
@@ -598,7 +654,7 @@ export default function ChatPage() {
 
             return (
               <div
-                key={`${item.role}-${index}-${item.createdAt ?? index}`}
+                key={item.id ?? `${item.role}-${index}-${item.createdAt ?? index}`}
                 className={`message-enter flex w-full ${stackGap} ${item.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
@@ -613,6 +669,18 @@ export default function ChatPage() {
                         : "rounded-bl-sm border border-stone-600 bg-stone-800 text-stone-100"
                     }`}
                   >
+                    {item.role === "user" && item.replyTo?.quote ? (
+                      <div className="mb-2 max-w-[min(100%,18rem)] border-l-2 border-amber-200/70 pl-2 text-[11px] leading-snug text-amber-100/90">
+                        <span className="text-amber-200/70">
+                          {item.replyTo.role === "assistant"
+                            ? cloneProfile?.name || "Clone"
+                            : "You"}
+                        </span>
+                        <p className="mt-0.5 whitespace-pre-wrap">
+                          {truncateReplyPreview(item.replyTo.quote, 160)}
+                        </p>
+                      </div>
+                    ) : null}
                     {item.content}
                     {item.createdAt ? (
                       <p
@@ -648,6 +716,17 @@ export default function ChatPage() {
                         {item.reaction}
                       </span>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => startReplyTo(item)}
+                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition ${
+                        item.role === "user"
+                          ? "border-amber-700/60 bg-amber-900/30 text-amber-100/85 hover:border-amber-500/70 hover:bg-amber-900/50"
+                          : "border-stone-600 bg-stone-900/60 text-stone-400 hover:border-stone-500 hover:text-stone-200"
+                      }`}
+                    >
+                      Reply
+                    </button>
                     <button
                       type="button"
                       data-reaction-trigger
@@ -724,6 +803,27 @@ export default function ChatPage() {
         <div className="border-t border-stone-700/80 bg-stone-800/90 p-4">
           {error ? <p className="mb-2 text-sm text-rose-400">{error}</p> : null}
 
+          {replyTarget?.quote ? (
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs text-amber-100/90">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-amber-200/70">
+                  Replying to {replyTarget.role === "assistant" ? cloneProfile?.name || "Clone" : "your message"}
+                </p>
+                <p className="mt-0.5 text-stone-200/90">
+                  {truncateReplyPreview(replyTarget.quote, 160)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyTarget(null)}
+                className="shrink-0 rounded-lg px-2 py-0.5 text-stone-400 transition hover:bg-stone-800 hover:text-stone-100"
+                aria-label="Cancel reply"
+              >
+                ✕
+              </button>
+            </div>
+          ) : null}
+
           <div className="relative flex items-center gap-2" ref={emojiPickerRef}>
             <button
               type="button"
@@ -774,7 +874,7 @@ export default function ChatPage() {
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-[11px] text-stone-500">
             <span>
-              React on the clone&apos;s bubbles to answer without typing · bursts wait a moment, then one reply
+              Reply or React on any bubble · react-only needs no typing · message bursts batch into one reply
             </span>
             <span>{message.length}/400</span>
           </div>
