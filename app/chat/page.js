@@ -874,7 +874,7 @@ export default function ChatPage() {
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-[11px] text-stone-500">
             <span>
-              Reply or React on any bubble · react-only needs no typing · message bursts batch into one reply
+              Any message you send gets an AI reply — Reply is optional (use it to point at a specific older bubble) · React on any bubble · react-only needs no typing · bursts batch into one reply
             </span>
             <span>{message.length}/400</span>
           </div>

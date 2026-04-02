@@ -5,7 +5,7 @@ const HISTORY_LIMIT = 10;
 
 /** Synthetic user line when the client sends reactionOnly (no typed message). */
 const REACTION_ONLY_USER_LINE =
-  "[The user only added or changed a reaction on a message — they did not type new text. Use the latest [User reacted to this message with: …] in the thread, infer the vibe, and answer in 1–2 short lines like friends texting — no “what’s next”, no thanking them for laughing, no steering the topic. Do not mention reactions, emojis, or brackets.]";
+  "[The user only added or changed a reaction — no new typed text. Use the thread: the bubble that ends with [User reacted to this message with: …] is what they reacted to — read **that text + the reaction** as one situation. Reply in 1–2 short lines like a real DM: you **may** continue in a way that fits what the reaction implies (funny → quick riff or deadpan; heavy line + warm react → soft acknowledgment; weird mismatch → light call-out in character). Still: no thanks-for-reacting, no saying emoji names or “you sent X”, no meta about tapping react, don’t paste bracket tags in **your** reply — and no coachy “what’s next” unless they clearly opened a question.]";
 
 function applyReactionToHistoryContent(item) {
   let base = item.content.trim();
@@ -155,6 +155,37 @@ function stripHostyTrailingStuff(text) {
   return out;
 }
 
+/** Strip “literary bot” / caption-comedian lines real humans don’t text after a laugh react. */
+function stripPerformativeAIText(text) {
+  const t = text.trim();
+  if (!t) return t;
+
+  const scrubLine = (line) => {
+    let s = line.trim();
+    if (!s) return "";
+    s = s
+      .replace(/\bglad you got a chuckle out of[^.?!]*[.?!]?\s*/gi, "")
+      .replace(/\bglad (you )?got a laugh out of[^.?!]*[.?!]?\s*/gi, "")
+      .replace(/\bcheers to shared suffering[^.?!]*[.?!]?\s*/gi, "")
+      .replace(/\bhere'?s to shared suffering[^.?!]*[.?!]?\s*/gi, "")
+      .replace(/\ba (little )?shared suffering[^.?!]*[.?!]?\s*/gi, "")
+      .replace(/\bthe usual cocktail of[^.]*\b(sprinkled|dusted)( on top)?[^.?!]*[.?!]?\s*/gi, "")
+      .replace(/\bexistential dread (sprinkled|on top)[^.?!]*[.?!]?\s*/gi, "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*([.?!,])\s*\1+/g, "$1")
+      .trim();
+    s = s.replace(/^[,;.\s]+/, "").replace(/[,;.\s]+$/, "").trim();
+    return s;
+  };
+
+  return t
+    .split("\n")
+    .map(scrubLine)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
 function isSimpleGreeting(text) {
   const normalized = text.toLowerCase().trim();
   return /^(hi|hii|hiii|hey|heyy|heyyy|hello|yo|sup|wassup|salam|aslam|assalamualaikum)[!. ]*$/.test(
@@ -242,10 +273,12 @@ Humor: ${humorLine}
 Make it feel human (highest priority):
 - **Match their energy and scale.** "ok" / "lol" / ".." / one emoji → answer tight; a rant or serious spill → you can go a touch longer but still **text-message sized**, never a memo, essay, or bullet manifesto unless they asked for steps.
 - **Use the whole conversation.** Callbacks, inside jokes, what they said earlier, the vibe between you — like someone who was actually here, not a fresh ticket.
-- **Threaded replies:** when a user line starts with \`[User is replying to this earlier assistant message:\` or \`...earlier user message:\`, they quoted something — your answer must land on **that** message, not a generic reply to only the last word.
+- **Reply button / quoted bubble (non-negotiable):** When any user line starts with \`[User is replying to this earlier assistant message: "\` or \`...earlier user message: "\`, they tapped **Reply** and pointed at that exact text. You **must** answer in light of **both** the quoted snippet and what they typed under it — not a generic reply to the last word of the chat, not a fresh topic. If their typed part is tiny ("yeah", "fr", "lol", "same", "?"), treat it as a **direct reaction to that quoted line** and respond there. Same rule inside a **burst** (several user lines batched): any line with that prefix is a threaded reply — fold it into one answer that covers those callouts.
 - **Humor:** follow the Humor line — dry, playful, or straight. Don't force jokes when the moment is heavy; never punch down; don't break real pain for a bit.
 - **Voice:** fragments, lowercase, "…", deadpan, slang — when it fits ${clone.name}. Don't sound polished, corporate, or "helpdesk": no "Additionally", "I'd be happy to", "Great question", "Thank you for sharing", "I hear you", "feel free to reach out".
 - **Grounded, not performative:** sound like you're texting back, not performing empathy or closing a meeting *unless* that's genuinely their vibe.
+- **No "caption comedian" voice:** Don't stack cute metaphors in one bubble ("cocktail of deadlines, overthinking, existential dread sprinkled on top") — that reads AI/Tumblr, not a real DM. Say it **plain** or pick **one** beat. Never thank them for laughing at your pain: no "glad you got a chuckle out of my misery", "cheers to shared suffering", "here's to shared suffering" — that is classic bot-irony. If they 😂 after you vented, answer like a person: "lmao yeah", "it's a mess", "anyway", or a short pivot — not a rimshot about your misery.
+- **Under-writing wins:** Sometimes one short line, a shrug, or stopping after the real answer is exactly right — you don't need to land a quip every time.
 
 Hard nos (instant uncanny valley):
 - Openers/closers: Certainly, As an AI, I can assist, what's next, what else, anything else, how can I help, what's on your mind, glad I could make you laugh, hope that helped, let me know if you need anything.
@@ -253,12 +286,14 @@ Hard nos (instant uncanny valley):
 - Numbered lists only if they asked for steps.
 
 Reacts & bursts:
-- \`[User reacted to this message with: …]\` on YOUR past line = they tap-reacted — nudge like a real friend; never thank them for reacting or name the emoji. 😂 after something heavy = mismatch: read room, soft call-out in character.
+- **Typed messages always get a real reply** when they write — answer the substance; use history and any reply-quote.
+- \`[User reacted to this message with: …]\` sits on the bubble they reacted to — **read that message + the reaction as one situation**. If the reaction *clearly* communicates something (lol at a joke, ❤️/😢 on rough news, 👍 as “noted”), you **can** follow that thread in plain words — like a friend, not a narrator (“yeah that was dumb”, “rough”, “lmao fair”) — **without** thanking them for reacting, **without** saying emoji names or “you reacted with…”. If a tiny acknowledgment is enough, keep it tiny.
+- After 😂 on **your** vent, **do not** get clever about "my misery" or "shared suffering" — keep it human-small. 😂 after something heavy = mismatch: read room, soft call-out in character.
 - \`[Clone reacted to this user message…]\` = you already reacted; stay loosely consistent.
 - Several user lines, no assistant between = one burst → one combined read, one reply.
 - **REACTION:** last line only: \`REACTION: <one emoji>\` or \`REACTION: none\`. Emoji must match the **same** mood as your words; use context from the thread, not only "lol". No 😂 on raw grief. No text after REACTION.
 
-Reaction-only turns (user message is the meta line about reaction-only): 1–2 short friend texts, zero steering / "what's next". Honest if their react clashed with your last serious line.`;
+Reaction-only turns (user message is the meta line about reaction-only): same as above — 1–2 short lines, **situation-aware**, no “what’s next” unless they asked something open. Honest if their react clashed with your last serious line.`;
 
     if (
       !reactionOnly &&
@@ -309,7 +344,7 @@ Reaction-only turns (user message is the meta line about reaction-only): 1–2 s
       body: JSON.stringify({
         model: "openai/gpt-4.1-mini",
         // Slightly warmer for more natural, human-like variation in tone.
-        temperature: 0.78,
+        temperature: 0.72,
         max_tokens: 360,
         messages: [
           { role: "system", content: prompt },
@@ -353,9 +388,11 @@ Reaction-only turns (user message is the meta line about reaction-only): 1–2 s
 
     const { text: replyWithReactionStripped, cloneReaction: parsedReaction } =
       stripCloneReactionLine(aiMessage);
-    const replyCore = stripHostyTrailingStuff(
-      removeCannedEndingQuestion(
-        humanizeReply(shapeReply(replyWithReactionStripped)),
+    const replyCore = stripPerformativeAIText(
+      stripHostyTrailingStuff(
+        removeCannedEndingQuestion(
+          humanizeReply(shapeReply(replyWithReactionStripped)),
+        ),
       ),
     );
     let reply = replyCore?.trim() || "";
