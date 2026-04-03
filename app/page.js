@@ -11,6 +11,8 @@ export default function HomePage() {
     style: "",
     tone: "",
     humor: "",
+    language: "english",
+    romanMode: false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -41,7 +43,15 @@ export default function HomePage() {
       const response = await fetch("/api/create-clone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          name: form.name,
+          personality: form.personality,
+          style: form.style,
+          tone: form.tone,
+          humor: form.humor,
+          language: form.language || "english",
+          romanMode: form.romanMode === true,
+        }),
       });
 
       const data = await response.json();
@@ -59,6 +69,8 @@ export default function HomePage() {
           style: data.style,
           tone: data.tone,
           humor: data.humor,
+          language: data.language ?? "english",
+          romanMode: data.romanMode === true,
         }),
       );
       router.push("/chat");
@@ -152,6 +164,68 @@ export default function HomePage() {
               placeholder="e.g. dry wit, playful jokes, mostly serious, meme-y"
               className="w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-stone-300">Chat language & script</p>
+            <div className="flex flex-row flex-nowrap items-stretch gap-3">
+              <div className="min-w-0 flex-1">
+                <label htmlFor="language" className="sr-only">
+                  Chat language
+                </label>
+                <select
+                  id="language"
+                  name="language"
+                  value={form.language}
+                  onChange={handleChange}
+                  className="h-full min-h-[2.75rem] w-full rounded-xl border border-stone-600 bg-stone-900/80 px-3 py-2.5 text-stone-100 outline-none transition focus:border-amber-600/70 focus:ring-2 focus:ring-amber-500/25"
+                >
+                  <option value="english">English</option>
+                  <option value="urdu">Urdu</option>
+                  <option value="hindi">Hindi</option>
+                  <option value="arabic">Arabic</option>
+                  <option value="punjabi">Punjabi</option>
+                </select>
+              </div>
+              <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl border border-stone-600/90 bg-stone-900/50 px-3 py-2.5 transition hover:border-stone-500 hover:bg-stone-900/70 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-amber-500/35">
+                <input
+                  type="checkbox"
+                  name="romanMode"
+                  checked={form.romanMode}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, romanMode: e.target.checked }))
+                  }
+                  className="peer sr-only"
+                />
+                <span
+                  aria-hidden
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 bg-stone-950 transition ${
+                    form.romanMode
+                      ? "border-amber-400 bg-amber-600/40 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.35)]"
+                      : "border-stone-500"
+                  }`}
+                >
+                  <svg
+                    viewBox="0 0 12 12"
+                    className={`h-3 w-3 text-amber-200 transition-opacity ${
+                      form.romanMode ? "opacity-100" : "opacity-0"
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M2.5 6l2.5 2.5L9.5 3.5" />
+                  </svg>
+                </span>
+                <span className="text-xs leading-snug text-stone-300 select-none">
+                  Roman / Latin script{" "}
+                  <span className="text-stone-500">(e.g. Urdu in English letters)</span>
+                </span>
+              </label>
+            </div>
           </div>
 
           {error ? <p className="text-sm text-rose-400">{error}</p> : null}

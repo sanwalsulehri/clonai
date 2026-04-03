@@ -9,6 +9,11 @@ export async function POST(request) {
     const style = body?.style?.trim();
     const tone = body?.tone?.trim();
     const humor = body?.humor?.trim();
+    const language =
+      typeof body?.language === "string" && body.language.trim()
+        ? body.language.trim()
+        : "english";
+    const romanMode = body?.romanMode === true;
     const goals = "Stay in character and answer point-to-point.";
     const doNotUse = "";
     const responseLength = "balanced";
@@ -31,6 +36,8 @@ export async function POST(request) {
       responseLength,
       goals,
       doNotUse,
+      language,
+      romanMode,
     });
     return NextResponse.json(clone, { status: 201 });
   } catch (error) {

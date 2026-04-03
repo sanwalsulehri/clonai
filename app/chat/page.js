@@ -260,13 +260,16 @@ export default function ChatPage() {
     const moodConfig = getMoodConfig();
 
     try {
+      const profile = cloneProfileRef.current;
       const { response, data } = await postCloneChat(
         {
           reactionOnly: true,
           message: "",
           turnMessages: [],
           cloneId,
-          clone: cloneProfileRef.current,
+          clone: profile,
+          language: profile?.language ?? "english",
+          romanMode: profile?.romanMode === true,
           history,
         },
         { signal: controller.signal },
@@ -362,12 +365,15 @@ export default function ChatPage() {
     const moodConfig = getMoodConfig();
 
     try {
+      const profile = cloneProfileRef.current;
       const { response, data } = await postCloneChat(
         {
           message: turnMessages[turnMessages.length - 1],
           turnMessages,
           cloneId,
-          clone: cloneProfileRef.current,
+          clone: profile,
+          language: profile?.language ?? "english",
+          romanMode: profile?.romanMode === true,
           history,
         },
         { signal: controller.signal },

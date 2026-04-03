@@ -12,6 +12,7 @@ import {
   isSimpleHowAreYou,
   processCloneRawReply,
 } from "@/lib/chatServerUtils";
+import { normalizeLanguageCode } from "@/lib/languagePrompt";
 import {
   extractAssistantMessageContent,
   fetchOpenRouterChatCompletion,
@@ -19,6 +20,25 @@ import {
 
 function jsonFallback() {
   return NextResponse.json({ reply: CHAT_FALLBACK_REPLY });
+}
+
+/** Server memory + client profile merge so localStorage can supply language, etc. */
+function resolveClone(body) {
+  const cloneId = body?.cloneId;
+  const fallbackClone = body?.clone;
+  const fromMem = cloneId ? findCloneById(cloneId) : null;
+  const hasFallback =
+    fallbackClone?.name?.trim() &&
+    fallbackClone?.personality?.trim() &&
+    fallbackClone?.style?.trim() &&
+    fallbackClone?.tone?.trim();
+
+  if (fromMem && hasFallback) {
+    return { ...fromMem, ...fallbackClone };
+  }
+  if (fromMem) return fromMem;
+  if (hasFallback) return fallbackClone;
+  return null;
 }
 
 export async function POST(request) {
@@ -38,8 +58,6 @@ export async function POST(request) {
     }
 
     const message = userTurn.length ? userTurn[userTurn.length - 1] : "";
-    const cloneId = body?.cloneId;
-    const fallbackClone = body?.clone;
     const rawHistory = Array.isArray(body?.history) ? body.history : [];
 
     if (!message || userTurn.length === 0) {
@@ -49,14 +67,7 @@ export async function POST(request) {
       );
     }
 
-    const cloneFromMemory = cloneId ? findCloneById(cloneId) : null;
-    const hasFallbackClone =
-      fallbackClone?.name?.trim() &&
-      fallbackClone?.personality?.trim() &&
-      fallbackClone?.style?.trim() &&
-      fallbackClone?.tone?.trim();
-
-    const clone = cloneFromMemory ?? (hasFallbackClone ? fallbackClone : null);
+    const clone = resolveClone(body);
 
     if (!clone) {
       return NextResponse.json(
@@ -78,10 +89,29 @@ export async function POST(request) {
       );
     }
 
-    const systemPrompt = buildCloneSystemPrompt(clone);
+    const langFromBody =
+      typeof body?.language === "string" && body.language.trim()
+        ? body.language.trim()
+        : null;
+    const language =
+      langFromBody ||
+      (typeof clone.language === "string" && clone.language.trim()) ||
+      "english";
+    const romanMode =
+      typeof body?.romanMode === "boolean"
+        ? body.romanMode
+        : clone.romanMode === true;
+
+    const isEnglish = normalizeLanguageCode(language) === "english";
+
+    const systemPrompt = buildCloneSystemPrompt(clone, {
+      language,
+      romanMode,
+    });
 
     if (
       !reactionOnly &&
+      isEnglish &&
       userTurn.length === 1 &&
       isSimpleGreeting(userTurn[0])
     ) {
@@ -92,6 +122,7 @@ export async function POST(request) {
 
     if (
       !reactionOnly &&
+      isEnglish &&
       userTurn.length === 1 &&
       isSimpleHowAreYou(userTurn[0])
     ) {
