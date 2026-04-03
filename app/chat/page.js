@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { postCloneChat } from "@/lib/api";
+import { CHAT_HISTORY_LIMIT, POST_FETCH_REVEAL_MS } from "@/lib/chatConstants";
 
 /** WhatsApp-style quick reactions first; more emojis follow in the same horizontal strip. */
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
@@ -48,18 +50,6 @@ function extractTrailingUserTurn(messages) {
 /** Quiet period after last send before one API call (human-style burst). */
 const REPLY_DEBOUNCE_MS = 950;
 
-/** After clone reaction lands, short pause before "typing" the text (human order: react → then type). */
-const CLONE_REACT_BEAT_MS = 600;
-
-function applyCloneReactionToLastUser(prev, cloneReactionFromApi) {
-  if (!cloneReactionFromApi) return prev;
-  const lastIdx = prev.length - 1;
-  if (lastIdx < 0 || prev[lastIdx]?.role !== "user") return prev;
-  return prev.map((m, i) =>
-    i === lastIdx ? { ...m, cloneReaction: cloneReactionFromApi } : m,
-  );
-}
-
 function newMessageId() {
   return crypto.randomUUID();
 }
@@ -102,7 +92,8 @@ export default function ChatPage() {
   const [cloneProfile, setCloneProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [typingVisible, setTypingVisible] = useState(false);
+  /** True while waiting on the model or simulated typing — shows Typing… */
+  const [typingIndicator, setTypingIndicator] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   /** Which message index has the reaction picker open (null = closed). */
   const [reactionPickerForIndex, setReactionPickerForIndex] = useState(null);
@@ -153,7 +144,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, typingIndicator]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -166,16 +157,16 @@ export default function ChatPage() {
     const tone = `${profile?.tone || ""} ${profile?.personality || ""} ${profile?.style || ""} ${profile?.humor || ""}`.toLowerCase();
 
     if (tone.includes("calm") || tone.includes("soft") || tone.includes("mature")) {
-      return { preDelayMs: 700, speedFactor: 1.2 };
+      return { speedFactor: 1.2 };
     }
     if (tone.includes("fun") || tone.includes("playful") || tone.includes("energetic")) {
-      return { preDelayMs: 300, speedFactor: 0.85 };
+      return { speedFactor: 0.85 };
     }
     if (tone.includes("direct") || tone.includes("sharp") || tone.includes("bold")) {
-      return { preDelayMs: 220, speedFactor: 0.75 };
+      return { speedFactor: 0.75 };
     }
 
-    return { preDelayMs: 450, speedFactor: 1 };
+    return { speedFactor: 1 };
   };
 
   const getHumanTypingDelay = (text) => {
@@ -213,14 +204,11 @@ export default function ChatPage() {
           (item.role === "user" || item.role === "assistant") &&
           item.content?.trim(),
       )
-      .slice(-10)
+      .slice(-CHAT_HISTORY_LIMIT)
       .map((item) => {
         const entry = { role: item.role, content: item.content };
         if (typeof item.reaction === "string" && item.reaction.trim()) {
           entry.reaction = item.reaction.trim();
-        }
-        if (typeof item.cloneReaction === "string" && item.cloneReaction.trim()) {
-          entry.cloneReaction = item.cloneReaction.trim();
         }
         const rq = item.replyTo?.quote;
         if (typeof rq === "string" && rq.trim() && item.role === "user") {
@@ -268,32 +256,23 @@ export default function ChatPage() {
 
     requestInFlightRef.current = true;
     setLoading(true);
-    setTypingVisible(false);
+    setTypingIndicator(true);
     const moodConfig = getMoodConfig();
 
     try {
-      const responsePromise = fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { response, data } = await postCloneChat(
+        {
           reactionOnly: true,
           message: "",
           turnMessages: [],
           cloneId,
           clone: cloneProfileRef.current,
           history,
-        }),
-        signal: controller.signal,
-      });
-
-      await wait(moodConfig.preDelayMs);
-      if (requestSeq !== chatRequestSeqRef.current) return;
-
-      const response = await responsePromise;
+        },
+        { signal: controller.signal },
+      );
 
       if (requestSeq !== chatRequestSeqRef.current) return;
-
-      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data?.error || "Failed to get AI response.");
@@ -304,15 +283,17 @@ export default function ChatPage() {
           ? data.reply.trim()
           : "ok";
 
-      setTypingVisible(false);
+      await wait(POST_FETCH_REVEAL_MS);
+      if (requestSeq !== chatRequestSeqRef.current) return;
 
-      setTypingVisible(true);
-      const typingMs = Math.floor(getHumanTypingDelay(replyText) * moodConfig.speedFactor);
+      const typingMs = Math.floor(
+        getHumanTypingDelay(replyText) * moodConfig.speedFactor,
+      );
       await wait(typingMs);
 
       if (requestSeq !== chatRequestSeqRef.current) return;
 
-      setTypingVisible(false);
+      setTypingIndicator(false);
       setMessages((prev) => [
         ...prev,
         {
@@ -326,7 +307,7 @@ export default function ChatPage() {
       if (sendError?.name === "AbortError") {
         return;
       }
-      setTypingVisible(false);
+      setTypingIndicator(false);
       const nextError = sendError.message || "Something went wrong.";
       setError(nextError);
 
@@ -338,7 +319,7 @@ export default function ChatPage() {
     } finally {
       requestInFlightRef.current = false;
       if (requestSeq === chatRequestSeqRef.current) {
-        setTypingVisible(false);
+        setTypingIndicator(false);
         setLoading(false);
         if (pendingReactionFollowUpRef.current) {
           pendingReactionFollowUpRef.current = false;
@@ -377,31 +358,22 @@ export default function ChatPage() {
 
     requestInFlightRef.current = true;
     setLoading(true);
-    setTypingVisible(false);
+    setTypingIndicator(true);
     const moodConfig = getMoodConfig();
 
     try {
-      const responsePromise = fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { response, data } = await postCloneChat(
+        {
           message: turnMessages[turnMessages.length - 1],
           turnMessages,
           cloneId,
           clone: cloneProfileRef.current,
           history,
-        }),
-        signal: controller.signal,
-      });
-
-      await wait(moodConfig.preDelayMs);
-      if (requestSeq !== chatRequestSeqRef.current) return;
-
-      const response = await responsePromise;
+        },
+        { signal: controller.signal },
+      );
 
       if (requestSeq !== chatRequestSeqRef.current) return;
-
-      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data?.error || "Failed to get AI response.");
@@ -412,26 +384,17 @@ export default function ChatPage() {
           ? data.reply.trim()
           : "ok";
 
-      const cloneReactionFromApi =
-        typeof data?.cloneReaction === "string" && data.cloneReaction.trim()
-          ? data.cloneReaction.trim()
-          : null;
+      await wait(POST_FETCH_REVEAL_MS);
+      if (requestSeq !== chatRequestSeqRef.current) return;
 
-      setTypingVisible(false);
-
-      if (cloneReactionFromApi) {
-        setMessages((prev) => applyCloneReactionToLastUser(prev, cloneReactionFromApi));
-        await wait(CLONE_REACT_BEAT_MS);
-        if (requestSeq !== chatRequestSeqRef.current) return;
-      }
-
-      setTypingVisible(true);
-      const typingMs = Math.floor(getHumanTypingDelay(replyText) * moodConfig.speedFactor);
+      const typingMs = Math.floor(
+        getHumanTypingDelay(replyText) * moodConfig.speedFactor,
+      );
       await wait(typingMs);
 
       if (requestSeq !== chatRequestSeqRef.current) return;
 
-      setTypingVisible(false);
+      setTypingIndicator(false);
       setMessages((prev) => [
         ...prev,
         {
@@ -445,7 +408,7 @@ export default function ChatPage() {
       if (sendError?.name === "AbortError") {
         return;
       }
-      setTypingVisible(false);
+      setTypingIndicator(false);
       const nextError = sendError.message || "Something went wrong.";
       setError(nextError);
 
@@ -457,7 +420,7 @@ export default function ChatPage() {
     } finally {
       requestInFlightRef.current = false;
       if (requestSeq === chatRequestSeqRef.current) {
-        setTypingVisible(false);
+        setTypingIndicator(false);
         setLoading(false);
         if (pendingReactionFollowUpRef.current) {
           pendingReactionFollowUpRef.current = false;
@@ -487,7 +450,7 @@ export default function ChatPage() {
       chatAbortRef.current?.abort();
       chatRequestSeqRef.current += 1;
       setLoading(false);
-      setTypingVisible(false);
+      setTypingIndicator(false);
     }
 
     pendingReactionFollowUpRef.current = false;
@@ -551,7 +514,7 @@ export default function ChatPage() {
     chatRequestSeqRef.current += 1;
     requestInFlightRef.current = false;
     setLoading(false);
-    setTypingVisible(false);
+    setTypingIndicator(false);
     setMessages([]);
     setReactionPickerForIndex(null);
     setReplyTarget(null);
@@ -650,7 +613,7 @@ export default function ChatPage() {
               index > 0 &&
               item.role === "user" &&
               messages[index - 1]?.role === "user";
-            const stackGap = packWithPrevUser ? "mt-1" : index === 0 ? "" : "mt-3";
+            const stackGap = packWithPrevUser ? "mt-1.5" : index === 0 ? "" : "mt-4";
 
             return (
               <div
@@ -665,13 +628,13 @@ export default function ChatPage() {
                       packWithPrevUser ? "rounded-tr-sm" : ""
                     } ${
                       item.role === "user"
-                        ? `rounded-br-sm bg-amber-800 text-stone-50 ${packWithPrevUser ? "" : "rounded-tr-2xl"}`
-                        : "rounded-bl-sm border border-stone-600 bg-stone-800 text-stone-100"
+                        ? `rounded-br-sm bg-blue-600 text-white ${packWithPrevUser ? "" : "rounded-tr-2xl"}`
+                        : "rounded-bl-sm border border-stone-600/90 bg-stone-700/95 text-stone-100"
                     }`}
                   >
                     {item.role === "user" && item.replyTo?.quote ? (
-                      <div className="mb-2 max-w-[min(100%,18rem)] border-l-2 border-amber-200/70 pl-2 text-[11px] leading-snug text-amber-100/90">
-                        <span className="text-amber-200/70">
+                      <div className="mb-2 max-w-[min(100%,18rem)] border-l-2 border-blue-200/80 pl-2 text-[11px] leading-snug text-blue-50/95">
+                        <span className="text-blue-100/80">
                           {item.replyTo.role === "assistant"
                             ? cloneProfile?.name || "Clone"
                             : "You"}
@@ -685,7 +648,7 @@ export default function ChatPage() {
                     {item.createdAt ? (
                       <p
                         className={`mt-1 text-[10px] ${
-                          item.role === "user" ? "text-amber-100/70" : "text-stone-400"
+                          item.role === "user" ? "text-blue-100/75" : "text-stone-400"
                         }`}
                       >
                         {formatTime(item.createdAt)}
@@ -695,21 +658,12 @@ export default function ChatPage() {
                   <div
                     className={`mt-1.5 flex max-w-full flex-wrap items-center gap-1.5 ${item.role === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    {item.role === "user" && item.cloneReaction ? (
-                      <span
-                        className="flex items-center gap-1 rounded-full border border-emerald-700/50 bg-emerald-950/40 px-2 py-0.5 text-[11px] text-emerald-100/95"
-                        title={`${cloneProfile?.name || "Clone"} reacted to your message`}
-                      >
-                        <span className="opacity-80">{cloneProfile?.name || "Clone"}</span>
-                        <span className="text-base leading-none">{item.cloneReaction}</span>
-                      </span>
-                    ) : null}
                     {item.reaction ? (
                       <span
                         className={`rounded-full px-2 py-0.5 text-base leading-none ${
                           item.role === "user"
-                            ? "bg-amber-900/60 text-stone-100"
-                            : "bg-stone-700/90 text-stone-100"
+                            ? "bg-blue-800/70 text-white"
+                            : "bg-stone-600/90 text-stone-100"
                         }`}
                         title="Your reaction"
                       >
@@ -721,7 +675,7 @@ export default function ChatPage() {
                       onClick={() => startReplyTo(item)}
                       className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition ${
                         item.role === "user"
-                          ? "border-amber-700/60 bg-amber-900/30 text-amber-100/85 hover:border-amber-500/70 hover:bg-amber-900/50"
+                          ? "border-blue-500/50 bg-blue-950/35 text-blue-100/90 hover:border-blue-400/60 hover:bg-blue-950/50"
                           : "border-stone-600 bg-stone-900/60 text-stone-400 hover:border-stone-500 hover:text-stone-200"
                       }`}
                     >
@@ -736,7 +690,7 @@ export default function ChatPage() {
                       }}
                       className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition ${
                         item.role === "user"
-                          ? "border-amber-700/60 bg-amber-900/40 text-amber-100/90 hover:border-amber-500/70 hover:bg-amber-900/55"
+                          ? "border-blue-500/50 bg-blue-950/45 text-blue-100/95 hover:border-blue-400/60 hover:bg-blue-950/55"
                           : "border-stone-600 bg-stone-900/60 text-stone-400 hover:border-stone-500 hover:text-stone-200"
                       }`}
                     >
@@ -772,7 +726,7 @@ export default function ChatPage() {
                               } ${
                                 active
                                   ? item.role === "user"
-                                    ? "bg-amber-700/90 shadow-inner ring-2 ring-amber-400/60"
+                                    ? "bg-blue-700/90 shadow-inner ring-2 ring-blue-400/60"
                                     : "bg-stone-600 ring-2 ring-stone-400/50"
                                   : "opacity-80 hover:bg-stone-800 hover:opacity-100"
                               }`}
@@ -789,10 +743,10 @@ export default function ChatPage() {
             );
           })}
 
-          {loading && typingVisible ? (
-            <div className="message-enter mt-3 flex w-full justify-start">
-              <div className="w-fit max-w-[82%] min-w-0 rounded-2xl rounded-bl-sm border border-stone-600 bg-stone-800 px-4 py-2.5 text-sm text-stone-400">
-                typing...
+          {typingIndicator ? (
+            <div className="message-enter mt-4 flex w-full justify-start">
+              <div className="w-fit max-w-[82%] min-w-0 rounded-2xl rounded-bl-sm border border-stone-600/80 bg-stone-700/90 px-4 py-2.5 text-sm text-stone-400">
+                Typing…
               </div>
             </div>
           ) : null}
@@ -804,9 +758,9 @@ export default function ChatPage() {
           {error ? <p className="mb-2 text-sm text-rose-400">{error}</p> : null}
 
           {replyTarget?.quote ? (
-            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs text-amber-100/90">
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-blue-700/40 bg-blue-950/30 px-3 py-2 text-xs text-blue-100/90">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-amber-200/70">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-blue-200/80">
                   Replying to {replyTarget.role === "assistant" ? cloneProfile?.name || "Clone" : "your message"}
                 </p>
                 <p className="mt-0.5 text-stone-200/90">
@@ -866,8 +820,12 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={sendMessage}
-              disabled={!message.trim() || message.trim().length > 400}
-              className="rounded-xl bg-amber-800 px-4 py-2.5 font-medium text-stone-50 transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={
+                !message.trim() ||
+                message.trim().length > 400 ||
+                loading
+              }
+              className="rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Send
             </button>
